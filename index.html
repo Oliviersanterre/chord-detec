@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chord Check</title>
+<meta name="theme-color" content="#2b1c17">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f2e7d3; --panel:#e6d5b8; --ink:#2e1f19; --muted:#6f5a48; --brass:#9a6f12;
+  --good:#3f8a33; --bad:#b4472f; --line:#cdb894; --heard:#2e1f19;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#2b1c17; --panel:#3a2620; --ink:#efe5d2; --muted:#b8a58e; --brass:#d9ae42;
+    --good:#86cc72; --bad:#ea8670; --line:#5a3e33; --heard:#efe5d2;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#2b1c17; --panel:#3a2620; --ink:#efe5d2; --muted:#b8a58e; --brass:#d9ae42;
+  --good:#86cc72; --bad:#ea8670; --line:#5a3e33; --heard:#efe5d2;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+body{
+  margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+  font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-tap-highlight-color:transparent;
+}
+.wrap{max-width:30rem;margin:0 auto;padding:1rem 1.25rem 2rem;display:flex;flex-direction:column;gap:1rem}
+header{display:flex;justify-content:space-between;align-items:baseline}
+header h1{font-size:1.05rem;font-weight:600;margin:0}
+.score{color:var(--muted);font-size:.95rem}
+.score b{color:var(--ink);font-weight:800}
+
+.prompt{text-align:center;padding-top:.5rem}
+.prompt .ask{color:var(--muted);font-size:1rem;margin:0}
+.chord{
+  font-size:clamp(5rem,30vw,8.5rem);font-weight:800;line-height:.95;margin:.1em 0 .05em;
+  letter-spacing:-.04em;font-variation-settings:"opsz" 96;transition:color .25s;
+}
+.notes{color:var(--muted);font-size:1.05rem;margin:0;word-spacing:.4em}
+.success .chord{color:var(--good)}
+
+.ringbox{display:flex;justify-content:center}
+svg.ring{width:min(78vw,300px);height:auto;overflow:visible}
+.ring text{font-family:inherit;font-size:13px;font-weight:600;fill:var(--ink);text-anchor:middle;dominant-baseline:central}
+.ring .center{font-size:30px;font-weight:800}
+.ring .centerlbl{font-size:12px;font-weight:400;fill:var(--muted)}
+
+.status{text-align:center;min-height:1.5em;margin:0;font-size:1.05rem}
+.status.good{color:var(--good);font-weight:600}
+.status.bad{color:var(--bad)}
+.status.err{color:var(--bad);font-size:.95rem;line-height:1.4}
+
+.meter{height:6px;border-radius:3px;background:var(--panel);overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--brass);transition:width .08s linear}
+
+.actions{display:flex;gap:.75rem}
+button{
+  font:inherit;font-weight:600;font-size:1.05rem;border-radius:999px;padding:.85rem 1.2rem;
+  border:2px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;flex:1;
+}
+button.ghost{background:transparent;color:var(--ink);flex:0 0 auto}
+button:focus-visible,label.chip:focus-within{outline:3px solid var(--brass);outline-offset:3px}
+
+fieldset{border:0;padding:0;margin:0}
+legend{color:var(--muted);font-size:.9rem;margin-bottom:.5rem}
+.chips{display:flex;flex-wrap:wrap;gap:.5rem}
+label.chip{
+  display:inline-flex;align-items:center;gap:.4rem;padding:.45rem .85rem;border-radius:999px;
+  border:1.5px solid var(--line);cursor:pointer;font-size:.95rem;user-select:none;
+}
+label.chip input{accent-color:var(--brass);margin:0}
+label.chip:has(input:checked){border-color:var(--brass);background:var(--panel)}
+.tip{color:var(--muted);font-size:.85rem;line-height:1.45;margin:0}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header>
+    <h1>Chord Check</h1>
+    <div class="score">Correct <b id="correct">0</b> · Streak <b id="streak">0</b></div>
+  </header>
+
+  <section class="prompt" aria-live="polite">
+    <p class="ask" id="ask">Play this chord</p>
+    <div class="chord" id="chord">C</div>
+    <p class="notes" id="notes">C E G</p>
+  </section>
+
+  <div class="ringbox"><svg class="ring" id="ring" viewBox="0 0 300 300" aria-label="Notes the microphone hears"></svg></div>
+
+  <div class="meter" aria-hidden="true"><i id="level"></i></div>
+  <p class="status" id="status">Tap Start, then strum.</p>
+
+  <div class="actions">
+    <button id="startBtn">Start listening</button>
+    <button id="skipBtn" class="ghost">Skip</button>
+  </div>
+
+  <fieldset>
+    <legend>Practice these chords</legend>
+    <div class="chips">
+      <label class="chip"><input type="checkbox" id="t-maj" checked> Major</label>
+      <label class="chip"><input type="checkbox" id="t-min" checked> Minor</label>
+      <label class="chip"><input type="checkbox" id="t-dom7"> Seventh</label>
+      <label class="chip"><input type="checkbox" id="allKeys"> All 12 keys</label>
+    </div>
+  </fieldset>
+
+  <p class="tip">Works with guitar, piano or ukulele. Play somewhere quiet, keep the phone close, and let the chord ring. The circle lights up the notes it hears; the outlined ones are the notes you need.</p>
+</div>
+
+<script>
+(function(){
+  const NAMES=["C","C♯","D","E♭","E","F","F♯","G","A♭","A","B♭","B"];
+  const TYPES={maj:{suffix:"",iv:[0,4,7]},min:{suffix:"m",iv:[0,3,7]},dom7:{suffix:"7",iv:[0,4,7,10]}};
+  const EASY_ROOTS=[0,2,4,5,7,9,11]; // C D E F G A B
+
+  const $=id=>document.getElementById(id);
+  const els={chord:$("chord"),notes:$("notes"),status:$("status"),level:$("level"),ring:$("ring"),
+    correct:$("correct"),streak:$("streak"),start:$("startBtn"),skip:$("skipBtn"),app:$("app"),ask:$("ask")};
+
+  // ---------- chord templates (with a little harmonic leakage built in) ----------
+  function makeTemplate(root,iv){
+    const t=new Float32Array(12);
+    iv.forEach(i=>{const p=(root+i)%12;t[p]+=1;t[(p+7)%12]+=0.22;t[(p+4)%12]+=0.08;});
+    let n=0;for(const v of t)n+=v*v;n=Math.sqrt(n);for(let i=0;i<12;i++)t[i]/=n;
+    return t;
+  }
+  const ALL=[];
+  for(const type in TYPES)for(let r=0;r<12;r++){
+    ALL.push({root:r,type,name:NAMES[r]+TYPES[type].suffix,tones:TYPES[type].iv.map(i=>(r+i)%12),tpl:makeTemplate(r,TYPES[type].iv)});
+  }
+
+  // ---------- practice state ----------
+  let target=null,correct=0,streak=0,celebrating=false;
+  function pool(){
+    const types=["maj","min","dom7"].filter(t=>$("t-"+t).checked);
+    if(!types.length){$("t-maj").checked=true;types.push("maj");}
+    const roots=$("allKeys").checked?[...Array(12).keys()]:EASY_ROOTS;
+    return ALL.filter(c=>types.includes(c.type)&&roots.includes(c.root));
+  }
+  function nextChord(){
+    const p=pool();let c;
+    do{c=p[Math.floor(Math.random()*p.length)];}while(p.length>1&&target&&c.name===target.name);
+    target=c;holdStart=0;wrongStart=0;wrongName="";
+    els.chord.textContent=c.name;
+    els.notes.textContent=c.tones.map(t=>NAMES[t]).join(" ");
+    els.app.classList.remove("success");
+    els.ask.textContent="Play this chord";
+    drawRing(chroma);
+  }
+  ["t-maj","t-min","t-dom7","allKeys"].forEach(id=>$(id).addEventListener("change",nextChord));
+  els.skip.addEventListener("click",()=>{streak=0;els.streak.textContent=streak;celebrating=false;nextChord();});
+
+  // ---------- note ring ----------
+  const ringNodes=[];
+  (function buildRing(){
+    const ns="http://www.w3.org/2000/svg",cx=150,cy=150,R=112;
+    for(let i=0;i<12;i++){
+      const a=(i/12)*Math.PI*2-Math.PI/2,x=cx+R*Math.cos(a),y=cy+R*Math.sin(a);
+      const g=document.createElementNS(ns,"g");
+      const fill=document.createElementNS(ns,"circle");
+      fill.setAttribute("cx",x);fill.setAttribute("cy",y);fill.setAttribute("r",22);
+      const out=document.createElementNS(ns,"circle");
+      out.setAttribute("cx",x);out.setAttribute("cy",y);out.setAttribute("r",22);out.setAttribute("fill","none");
+      const t=document.createElementNS(ns,"text");t.setAttribute("x",x);t.setAttribute("y",y);t.textContent=NAMES[i];
+      g.append(fill,out,t);els.ring.append(g);ringNodes.push({fill,out,t});
+    }
+    const lbl=document.createElementNS(ns,"text");lbl.setAttribute("x",cx);lbl.setAttribute("y",cy-26);
+    lbl.setAttribute("class","centerlbl");lbl.textContent="I hear";
+    const c=document.createElementNS(ns,"text");c.setAttribute("x",cx);c.setAttribute("y",cy+6);
+    c.setAttribute("class","center");c.id="heard";c.textContent="–";
+    els.ring.append(lbl,c);
+  })();
+  function drawRing(ch){
+    let mx=0;for(const v of ch)mx=Math.max(mx,v);
+    for(let i=0;i<12;i++){
+      const n=ringNodes[i],isT=target&&target.tones.includes(i),lv=mx>0?ch[i]/mx:0;
+      n.out.setAttribute("stroke",isT?"var(--brass)":"var(--line)");
+      n.out.setAttribute("stroke-width",isT?3.5:1.5);
+      n.fill.setAttribute("fill",isT?"var(--brass)":"var(--heard)");
+      n.fill.setAttribute("fill-opacity",(lv*lv*0.85).toFixed(3));
+      n.t.style.fill=(lv>0.55)?"var(--bg)":"var(--ink)";
+    }
+  }
+
+  // ---------- audio ----------
+  let ctx,analyser,freqBuf,timeBuf,bins=[],running=false,stream,wakeLock=null;
+  const chroma=new Float32Array(12);
+  let holdStart=0,wrongStart=0,wrongName="";
+
+  async function start(){
+    if(running){stop();return;}
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+      setStatus("This browser can't use the microphone here. Open the page in Chrome on your phone.","err");return;
+    }
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    }catch(e){
+      setStatus("The microphone is blocked ("+(e&&e.name||"error")+"). Tap Allow when your phone asks, or allow it in the browser's site settings.","err");return;
+    }
+    ctx=new (window.AudioContext||window.webkitAudioContext)();
+    await ctx.resume();
+    const src=ctx.createMediaStreamSource(stream);
+    analyser=ctx.createAnalyser();analyser.fftSize=16384;analyser.smoothingTimeConstant=0.4;
+    src.connect(analyser);
+    freqBuf=new Float32Array(analyser.frequencyBinCount);
+    timeBuf=new Float32Array(analyser.fftSize);
+    const sr=ctx.sampleRate,N=analyser.fftSize;
+    const lo=Math.floor(70*N/sr),hi=Math.ceil(1600*N/sr);
+    bins=[lo,hi,sr/N];
+    running=true;els.start.textContent="Stop";
+    try{ if(navigator.wakeLock) wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
+    setStatus("Listening… play "+target.name+".","");
+    requestAnimationFrame(loop);
+  }
+  function stop(){
+    running=false;els.start.textContent="Start listening";
+    try{ if(wakeLock){wakeLock.release();wakeLock=null;} }catch(e){}
+    if(stream)stream.getTracks().forEach(t=>t.stop());
+    if(ctx)ctx.close();
+    chroma.fill(0);drawRing(chroma);els.level.style.width="0";
+    document.getElementById("heard").textContent="–";
+    setStatus("Paused. Tap Start to keep going.","");
+  }
+  els.start.addEventListener("click",start);
+
+  function setStatus(msg,cls){els.status.textContent=msg;els.status.className="status"+(cls?" "+cls:"");}
+
+  function loop(now){
+    if(!running)return;
+    analyser.getFloatTimeDomainData(timeBuf);
+    let rms=0;for(let i=0;i<timeBuf.length;i++)rms+=timeBuf[i]*timeBuf[i];
+    rms=Math.sqrt(rms/timeBuf.length);
+    els.level.style.width=Math.min(100,rms*600)+"%";
+
+    const loud=rms>0.008;
+    if(loud){
+      analyser.getFloatFrequencyData(freqBuf);
+      const [lo,hi,hz]=bins,frame=new Float32Array(12);
+      let peakDb=-200;for(let k=lo;k<=hi;k++)if(freqBuf[k]>peakDb)peakDb=freqBuf[k];
+      const floor=peakDb-40;
+      for(let k=lo+1;k<hi;k++){
+        const a=freqBuf[k-1],b=freqBuf[k],c=freqBuf[k+1];
+        if(b<floor||b<=a||b<c)continue;
+        const d=0.5*(a-c)/(a-2*b+c||1e-9);           // parabolic peak refinement
+        const f=(k+d)*hz;
+        const midi=69+12*Math.log2(f/440),near=Math.round(midi),dev=Math.abs(midi-near);
+        if(dev>0.35)continue;
+        const mag=Math.pow(10,b/20);
+        frame[((near%12)+12)%12]+=mag*(1-dev);
+      }
+      let mx=0;for(const v of frame)mx=Math.max(mx,v);
+      if(mx>0)for(let i=0;i<12;i++)chroma[i]=chroma[i]*0.7+(frame[i]/mx)*0.3;
+    }else{
+      for(let i=0;i<12;i++)chroma[i]*=0.9;
+    }
+    drawRing(chroma);
+
+    // match against every chord template
+    let n=0;for(const v of chroma)n+=v*v;n=Math.sqrt(n);
+    let best=null,bestScore=0,targetScore=0;
+    if(n>0.05){
+      for(const c of ALL){
+        let s=0;for(let i=0;i<12;i++)s+=c.tpl[i]*chroma[i];s/=n;
+        if(s>bestScore){bestScore=s;best=c;}
+        if(c===target)targetScore=s;
+      }
+    }
+    const confident=loud&&best&&bestScore>0.78;
+    document.getElementById("heard").textContent=confident?best.name:"–";
+
+    if(!celebrating){
+      // count as right if the target is the top match, or essentially tied with it
+      const right=loud&&target&&targetScore>0.8&&(best===target||bestScore-targetScore<0.015);
+      if(right){
+        if(!holdStart)holdStart=now;
+        wrongStart=0;
+        if(now-holdStart>450){win();}
+        else setStatus("Hold it…","");
+      }else{
+        holdStart=0;
+        if(confident&&best!==target){
+          if(wrongName!==best.name){wrongName=best.name;wrongStart=now;}
+          if(now-wrongStart>900)setStatus("That sounds like "+best.name+". Try "+target.name+" again.","bad");
+        }else if(!loud){
+          wrongStart=0;wrongName="";
+          if(!els.status.classList.contains("bad"))setStatus("Listening… play "+target.name+".","");
+        }
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function win(){
+    celebrating=true;correct++;streak++;
+    els.correct.textContent=correct;els.streak.textContent=streak;
+    els.app.classList.add("success");els.ask.textContent="Nice, that's it";
+    setStatus("✓ "+target.name+" sounded right!","good");
+    setTimeout(()=>{celebrating=false;chroma.fill(0);nextChord();
+      if(running)setStatus("Listening… play "+target.name+".","");},1400);
+  }
+
+  nextChord();
+  if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+CHORD CHECK - how to put it on your phone
+==========================================
+
+The app has to be on a real web address (https) so Android lets it use the
+microphone. GitHub Pages does this for free.
+
+1. Unzip this file. (On Android: open it in the Files app and tap "Extract".)
+
+2. Make a free account at github.com and create a new repository
+   called chord-check (set it to Public).
+
+3. In the repository, tap "Add file" > "Upload files" and upload everything
+   from the unzipped folder: index.html, manifest.webmanifest, sw.js,
+   and the icons folder (upload the 4 icon files into a folder named icons).
+   Tip: on a phone, switch Chrome to "Desktop site" if uploading is fiddly.
+
+4. Go to Settings > Pages. Under "Branch" choose "main" and tap Save.
+   After a minute your app is live at:
+   https://YOUR-USERNAME.github.io/chord-check/
+
+5. Open that address in Chrome on your phone, tap the menu (three dots)
+   and choose "Install app" (or "Add to Home screen").
+
+Done. It now has its own icon, opens full screen, and works offline.
+
+WANT A REAL .APK FILE?
+Go to pwabuilder.com, paste your app's address from step 4, and choose
+"Package for stores" > Android. It gives you an APK you can install, or
+an AAB file for publishing on the Google Play Store.
