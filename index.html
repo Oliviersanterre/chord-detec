@@ -47,6 +47,7 @@ header h1{font-size:1.05rem;font-weight:600;margin:0}
   font-size:clamp(5rem,30vw,8.5rem);font-weight:800;line-height:.95;margin:.1em 0 .05em;
   letter-spacing:-.04em;font-variation-settings:"opsz" 96;transition:color .25s;
 }
+.chord .sfx{font-size:.42em;font-weight:600;letter-spacing:-.01em;margin-left:.03em}
 .notes{color:var(--muted);font-size:1.05rem;margin:0;word-spacing:.4em}
 .success .chord{color:var(--good)}
 
@@ -82,6 +83,23 @@ label.chip{
 label.chip input{accent-color:var(--brass);margin:0}
 label.chip:has(input:checked){border-color:var(--brass);background:var(--panel)}
 .tip{color:var(--muted);font-size:.85rem;line-height:1.45;margin:0}
+.timerbar{display:flex;justify-content:space-between;align-items:baseline;background:var(--panel);border-radius:14px;padding:.5rem 1rem}
+.timerbar[hidden],.result[hidden],.tip[hidden]{display:none}
+.clock{font-size:2.2rem;font-weight:800;font-variant-numeric:tabular-nums;transition:color .2s}
+.clock.low{color:var(--bad)}
+.tscore{color:var(--muted)}
+.tscore b{color:var(--ink);font-size:1.6rem;font-weight:800;font-variant-numeric:tabular-nums}
+button.brass{background:var(--brass);border-color:var(--brass);color:var(--bg);width:100%}
+.result{background:var(--panel);border-radius:14px;padding:1rem;text-align:center}
+.result p{margin:0}
+.result .big{font-size:3rem;font-weight:800;line-height:1.05}
+.result .sub{color:var(--muted)}
+.result .new{color:var(--good);font-weight:600;margin-top:.4rem}
+.hs h2{font-size:.9rem;font-weight:400;color:var(--muted);margin:0 0 .4rem}
+.hs ol{margin:0;padding-left:1.6rem;display:flex;flex-direction:column;gap:.3rem}
+.hs li{font-variant-numeric:tabular-nums;font-weight:600}
+.hs li span{color:var(--muted);font-weight:400;font-size:.85rem;margin-left:.5rem}
+.hs li.fresh{color:var(--good)}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
@@ -91,6 +109,11 @@ label.chip:has(input:checked){border-color:var(--brass);background:var(--panel)}
     <h1>Chord Check</h1>
     <div class="score">Correct <b id="correct">0</b> · Streak <b id="streak">0</b></div>
   </header>
+
+  <div class="timerbar" id="timerbar" hidden>
+    <span class="clock" id="clock">2:00</span>
+    <span class="tscore"><b id="tscore">0</b> chords</span>
+  </div>
 
   <section class="prompt" aria-live="polite">
     <p class="ask" id="ask">Play this chord</p>
@@ -107,16 +130,26 @@ label.chip:has(input:checked){border-color:var(--brass);background:var(--panel)}
     <button id="startBtn">Start listening</button>
     <button id="skipBtn" class="ghost">Skip</button>
   </div>
+  <button id="challengeBtn" class="brass">Start 2-minute challenge</button>
+  <div class="result" id="result" hidden aria-live="polite"></div>
 
   <fieldset>
     <legend>Practice these chords</legend>
     <div class="chips">
       <label class="chip"><input type="checkbox" id="t-maj" checked> Major</label>
       <label class="chip"><input type="checkbox" id="t-min" checked> Minor</label>
-      <label class="chip"><input type="checkbox" id="t-dom7"> Seventh</label>
-      <label class="chip"><input type="checkbox" id="allKeys"> All 12 keys</label>
+      <label class="chip"><input type="checkbox" id="t-dom7" checked> Dominant 7</label>
+      <label class="chip"><input type="checkbox" id="t-min7" checked> Minor 7</label>
+      <label class="chip"><input type="checkbox" id="t-maj7" checked> Major 7</label>
+      <label class="chip"><input type="checkbox" id="allKeys" checked> All 12 keys</label>
     </div>
   </fieldset>
+
+  <section class="hs">
+    <h2>High scores (2-minute challenge)</h2>
+    <ol id="hslist"></ol>
+    <p class="tip" id="hsempty">No scores yet. Try the challenge!</p>
+  </section>
 
   <p class="tip">Works with guitar, piano or ukulele. Play somewhere quiet, keep the phone close, and let the chord ring. The circle lights up the notes it hears; the outlined ones are the notes you need.</p>
 </div>
@@ -124,7 +157,7 @@ label.chip:has(input:checked){border-color:var(--brass);background:var(--panel)}
 <script>
 (function(){
   const NAMES=["C","C♯","D","E♭","E","F","F♯","G","A♭","A","B♭","B"];
-  const TYPES={maj:{suffix:"",iv:[0,4,7]},min:{suffix:"m",iv:[0,3,7]},dom7:{suffix:"7",iv:[0,4,7,10]}};
+  const TYPES={maj:{suffix:"",iv:[0,4,7]},min:{suffix:"m",iv:[0,3,7]},dom7:{suffix:"7",iv:[0,4,7,10]},min7:{suffix:"m7",iv:[0,3,7,10]},maj7:{suffix:"maj7",iv:[0,4,7,11]}};
   const EASY_ROOTS=[0,2,4,5,7,9,11]; // C D E F G A B
 
   const $=id=>document.getElementById(id);
@@ -140,13 +173,13 @@ label.chip:has(input:checked){border-color:var(--brass);background:var(--panel)}
   }
   const ALL=[];
   for(const type in TYPES)for(let r=0;r<12;r++){
-    ALL.push({root:r,type,name:NAMES[r]+TYPES[type].suffix,tones:TYPES[type].iv.map(i=>(r+i)%12),tpl:makeTemplate(r,TYPES[type].iv)});
+    ALL.push({root:r,type,sfx:TYPES[type].suffix,name:NAMES[r]+TYPES[type].suffix,tones:TYPES[type].iv.map(i=>(r+i)%12),tpl:makeTemplate(r,TYPES[type].iv)});
   }
 
   // ---------- practice state ----------
   let target=null,correct=0,streak=0,celebrating=false;
   function pool(){
-    const types=["maj","min","dom7"].filter(t=>$("t-"+t).checked);
+    const types=["maj","min","dom7","min7","maj7"].filter(t=>$("t-"+t).checked);
     if(!types.length){$("t-maj").checked=true;types.push("maj");}
     const roots=$("allKeys").checked?[...Array(12).keys()]:EASY_ROOTS;
     return ALL.filter(c=>types.includes(c.type)&&roots.includes(c.root));
@@ -155,13 +188,14 @@ label.chip:has(input:checked){border-color:var(--brass);background:var(--panel)}
     const p=pool();let c;
     do{c=p[Math.floor(Math.random()*p.length)];}while(p.length>1&&target&&c.name===target.name);
     target=c;holdStart=0;wrongStart=0;wrongName="";
-    els.chord.textContent=c.name;
+    els.chord.textContent=NAMES[c.root];
+    if(c.sfx){const sp=document.createElement("span");sp.className="sfx";sp.textContent=c.sfx;els.chord.append(sp);}
     els.notes.textContent=c.tones.map(t=>NAMES[t]).join(" ");
     els.app.classList.remove("success");
     els.ask.textContent="Play this chord";
     drawRing(chroma);
   }
-  ["t-maj","t-min","t-dom7","allKeys"].forEach(id=>$(id).addEventListener("change",nextChord));
+  ["t-maj","t-min","t-dom7","t-min7","t-maj7","allKeys"].forEach(id=>$(id).addEventListener("change",nextChord));
   els.skip.addEventListener("click",()=>{streak=0;els.streak.textContent=streak;celebrating=false;nextChord();});
 
   // ---------- note ring ----------
@@ -227,6 +261,7 @@ label.chip:has(input:checked){border-color:var(--brass);background:var(--panel)}
     requestAnimationFrame(loop);
   }
   function stop(){
+    if(ch.active)endChallenge(false);
     running=false;els.start.textContent="Start listening";
     try{ if(wakeLock){wakeLock.release();wakeLock=null;} }catch(e){}
     if(stream)stream.getTracks().forEach(t=>t.stop());
@@ -306,12 +341,75 @@ label.chip:has(input:checked){border-color:var(--brass);background:var(--panel)}
 
   function win(){
     celebrating=true;correct++;streak++;
+    if(ch.active){ch.score++;$("tscore").textContent=ch.score;}
     els.correct.textContent=correct;els.streak.textContent=streak;
     els.app.classList.add("success");els.ask.textContent="Nice, that's it";
     setStatus("✓ "+target.name+" sounded right!","good");
     setTimeout(()=>{celebrating=false;chroma.fill(0);nextChord();
-      if(running)setStatus("Listening… play "+target.name+".","");},1400);
+      if(running&&$("result").hidden)setStatus((ch.active?"Next: ":"Listening… play ")+target.name+".","");},ch.active?700:1400);
   }
+
+  // ---------- 2-minute challenge + high scores ----------
+  const DURATION=120000,HS_KEY="chordcheck-highscores";
+  const ch={active:false,end:0,score:0,timer:null};
+  els.challenge=$("challengeBtn");
+  function loadHS(){try{return JSON.parse(localStorage.getItem(HS_KEY))||[];}catch(e){return [];}}
+  function saveHS(l){try{localStorage.setItem(HS_KEY,JSON.stringify(l));}catch(e){}}
+  function typesLabel(){
+    const lbl={maj:"Major",min:"Minor",dom7:"7",min7:"m7",maj7:"maj7"};
+    return ["maj","min","dom7","min7","maj7"].filter(t=>$("t-"+t).checked).map(t=>lbl[t]).join(", ")+($("allKeys").checked?"":", easy keys");
+  }
+  function renderHS(freshT){
+    const l=loadHS(),ol=$("hslist");ol.innerHTML="";
+    $("hsempty").hidden=l.length>0;
+    l.forEach(e=>{
+      const li=document.createElement("li");li.textContent=e.score+(e.score===1?" chord":" chords");
+      const sp=document.createElement("span");sp.textContent=new Date(e.t).toLocaleDateString()+" ("+e.types+")";
+      li.append(sp);if(e.t===freshT)li.className="fresh";ol.append(li);
+    });
+  }
+  async function startChallenge(){
+    if(ch.active){endChallenge(false);return;}
+    if(!running){await start();if(!running)return;}
+    ch.active=true;ch.score=0;ch.end=Date.now()+DURATION;
+    $("result").hidden=true;$("timerbar").hidden=false;$("tscore").textContent="0";
+    els.challenge.textContent="Give up";
+    celebrating=false;chroma.fill(0);nextChord();
+    setStatus("Go! Play "+target.name+".","");
+    tick();ch.timer=setInterval(tick,200);
+  }
+  function tick(){
+    const left=Math.max(0,ch.end-Date.now()),sec=Math.ceil(left/1000),c=$("clock");
+    c.textContent=Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0");
+    c.classList.toggle("low",sec<=10);
+    if(left<=0)endChallenge(true);
+  }
+  function beep(){
+    try{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=880;
+      g.gain.setValueAtTime(0.0001,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.3,ctx.currentTime+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.6);
+      o.connect(g).connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.65);}catch(e){}
+  }
+  function endChallenge(finished){
+    clearInterval(ch.timer);ch.active=false;
+    els.challenge.textContent="Start 2-minute challenge";$("timerbar").hidden=true;
+    if(!finished){setStatus("Challenge stopped.","");return;}
+    beep();
+    const l=loadHS(),prevBest=l.length?l[0].score:-1,entry={score:ch.score,t:Date.now(),types:typesLabel()};
+    l.push(entry);l.sort((a,b)=>b.score-a.score||a.t-b.t);
+    const top=l.slice(0,5);saveHS(top);
+    const r=$("result");r.innerHTML="";
+    const add=(cls,txt)=>{const p=document.createElement("p");p.className=cls;p.textContent=txt;r.append(p);};
+    add("sub","Time's up!");add("big",String(ch.score));
+    add("sub",(ch.score===1?"chord":"chords")+" in 2 minutes");
+    if(ch.score>prevBest&&ch.score>0)add("new","🏆 New high score!");
+    else if(top.includes(entry)&&ch.score>0)add("new","You made the top 5!");
+    r.hidden=false;
+    renderHS(top.includes(entry)?entry.t:null);
+    setStatus("Tap the challenge button to go again.","");
+  }
+  els.challenge.addEventListener("click",startChallenge);
+  renderHS();
 
   nextChord();
   if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }
