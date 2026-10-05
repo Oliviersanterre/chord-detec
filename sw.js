@@ -1,5 +1,5 @@
 // Keeps Chord Check working offline once it has been opened.
-const CACHE = "chord-check-v1";
+const CACHE = "chord-check-v3";
 const FILES = ["./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];
 
